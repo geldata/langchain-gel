@@ -1,0 +1,27 @@
+[project]
+name = "langchain-gel"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "deepbuzin", email = "contactbuzin@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "langchain-core>=0.3.22",
+]
+
+[project.scripts]
+langchain-gel = "langchain_gel:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+test = [
+    "langchain-tests>=0.3.6",
+    "pytest>=8.3.4",
+    "pytest-asyncio>=0.24.0",
+    "pytest-socket>=0.7.0",
+]
