@@ -154,7 +154,7 @@ def filter_to_edgeql(filter: Union[dict, str, int, float]) -> str:
             return f'<str>json_get(.metadata, "{op}"){filter_to_edgeql(arguments)}'
 
 
-class EdgeDBVectorStore(VectorStore):
+class GelVectorStore(VectorStore):
     def __init__(
         self,
         embeddings: Embeddings,
@@ -525,7 +525,7 @@ class EdgeDBVectorStore(VectorStore):
         *,
         ids: Optional[list[str]] = None,
         **kwargs: Any,
-    ) -> "EdgeDBVectorStore":
+    ) -> "GelVectorStore":
         """Return VectorStore initialized from texts and embeddings.
 
         Args:
@@ -552,7 +552,7 @@ class EdgeDBVectorStore(VectorStore):
         *,
         ids: Optional[list[str]] = None,
         **kwargs: Any,
-    ) -> "EdgeDBVectorStore":
+    ) -> "GelVectorStore":
         store = cls(embedding, use_async=True)
         await store.aadd_texts(texts, metadatas, ids)
         return store
