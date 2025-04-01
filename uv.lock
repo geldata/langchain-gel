@@ -216,6 +216,7 @@ dependencies = [
     { name = "gel" },
     { name = "jinja2" },
     { name = "langchain-core" },
+    { name = "langchain-tests" },
 ]
 
 [package.dev-dependencies]
@@ -231,6 +232,7 @@ requires-dist = [
     { name = "gel", specifier = ">=3.0.1" },
     { name = "jinja2", specifier = ">=3.1.4" },
     { name = "langchain-core", specifier = ">=0.3.22" },
+    { name = "langchain-tests", specifier = ">=0.3.17" },
 ]
 
 [package.metadata.requires-dev]
