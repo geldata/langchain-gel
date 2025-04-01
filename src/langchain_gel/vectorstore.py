@@ -1,4 +1,7 @@
 from langchain_core.vectorstores import VectorStore
+from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
+
 from typing import (
     Any,
     Optional,
@@ -9,75 +12,120 @@ from typing import (
     Union,
 )
 
-from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
-
-import edgedb
-
 import logging
 from itertools import cycle
 import json
 from jinja2 import Template
+import textwrap
 
 logger = logging.getLogger(__name__)
 
-
-COSINE_SIMILARITY_QUERY = Template(
-    """
-with collection_records := (select {{record_type}} filter .collection = <str>$collection_name)
-select collection_records {
-    external_id, 
-    text,
-    embedding,
-    metadata,
-    cosine_similarity := 1 - ext::pgvector::cosine_distance(
-        .embedding, <ext::pgvector::vector>$query_embedding),
-}
-{{filter_clause}}
-order by .cosine_similarity desc empty last
-limit <optional int64>$limit;
+IMPORT_ERROR_MESSAGE = """
+Error: Gel Python package is not installed.
+Please install it using 'pip install gel'.
 """
-)
 
-SELECT_BY_DOC_ID_QUERY = Template(
-    """
-select {{record_type}} {
-    external_id,
-    text,
-    embedding,
-    metadata, 
-}
-filter .external_id in array_unpack(<array<str>>$external_ids);
+NO_PROJECT_MESSAGE = """
+Error: it appears that the Gel project has not been initialized.
+If that's the case, please run 'gel project init' to get started.
 """
-)
 
-INSERT_QUERY = Template(
-    """
-select (
-    insert {{record_type}} {
-        collection := <str>$collection_name,
-        external_id := <optional str>$external_id,
-        text := <str>$text,
-        embedding := <ext::pgvector::vector>$embedding,
-        metadata := <json>$metadata,
+MISSING_RECORD_TYPE_TEMPLATE = """
+Error: Record type {{record_type}} is missing from the Gel schema.
+
+In order to use the LangChain integration, ensure you put the following in dbschema/default.gel:
+
+    using extension pgvector;
+                                        
+    module default {
+        type {{record_type}} {
+            required collection: str;
+            text: str;
+            embedding: ext::pgvector::vector<1536>;
+            external_id: str {
+                constraint exclusive;
+            };
+            metadata: json;
+
+            index ext::pgvector::hnsw_cosine(m := 16, ef_construction := 128)
+                on (.embedding)
+        } 
     }
-) { external_id }
+
+Remember that you also need to run a migration:
+    
+    $ gel migration create
+    $ gel migrate
+
 """
+
+try:
+    import gel
+except ImportError as e:
+    logger.error(IMPORT_ERROR_MESSAGE)
+    raise e
+
+
+def format_query(text: str) -> Template:
+    return Template(textwrap.dedent(text.strip()))
+
+
+COSINE_SIMILARITY_QUERY = format_query(
+    """
+    with collection_records := (select {{record_type}} filter .collection = <str>$collection_name)
+    select collection_records {
+        external_id, 
+        text,
+        embedding,
+        metadata,
+        cosine_similarity := 1 - ext::pgvector::cosine_distance(
+            .embedding, <ext::pgvector::vector>$query_embedding),
+    }
+    {{filter_clause}}
+    order by .cosine_similarity desc empty last
+    limit <optional int64>$limit;
+    """
 )
 
-DELETE_BY_IDS_QUERY = Template(
+SELECT_BY_DOC_ID_QUERY = format_query(
     """
-with collection_records := (select {{record_type}} filter .collection = <str>$collection_name)
-delete {{record_type}} 
-filter .external_id in array_unpack(<array<str>>$external_ids);
-"""
+    select {{record_type}} {
+        external_id,
+        text,
+        embedding,
+        metadata, 
+    }
+    filter .external_id in array_unpack(<array<str>>$external_ids);
+    """
 )
 
-DELETE_ALL_QUERY = Template(
+INSERT_QUERY = format_query(
     """
-delete {{record_type}}
-filter .collection = <str>$collection_name;
-"""
+    select (
+        insert {{record_type}} {
+            collection := <str>$collection_name,
+            external_id := <optional str>$external_id,
+            text := <str>$text,
+            embedding := <ext::pgvector::vector>$embedding,
+            metadata := <json>$metadata,
+        }
+    ) { external_id }
+    """
+)
+
+DELETE_BY_IDS_QUERY = format_query(
+    """
+    with collection_records := (select {{record_type}} filter .collection = <str>$collection_name)
+    delete {{record_type}} 
+    filter .external_id in array_unpack(<array<str>>$external_ids);
+    """
+)
+
+DELETE_ALL_QUERY = format_query(
+    """
+    delete {{record_type}}
+    filter .collection = <str>$collection_name;
+    """
 )
 
 
@@ -107,15 +155,15 @@ def filter_to_edgeql(filter: Union[dict, str, int, float]) -> str:
         formatted_filter = f'"{filter}"' if isinstance(filter, str) else str(filter)
         return f" = {formatted_filter}"
 
-    assert isinstance(
-        filter, dict
-    ), f"Expected a dict of operands but got: {type(filter)}: {filter}"
+    assert isinstance(filter, dict), (
+        f"Expected a dict of operands but got: {type(filter)}: {filter}"
+    )
 
     for op, arguments in filter.items():
         if op in {"$and", "$or"}:
-            assert isinstance(
-                arguments, list
-            ), f"Expected a list of dicts for {op} operator but got: {type(arguments)}"
+            assert isinstance(arguments, list), (
+                f"Expected a list of dicts for {op} operator but got: {type(arguments)}"
+            )
 
             filter_clause = f" {FILTER_OPS[op]} ".join(
                 filter_to_edgeql(item) for item in arguments
@@ -123,25 +171,25 @@ def filter_to_edgeql(filter: Union[dict, str, int, float]) -> str:
             return "(" + filter_clause + ")"
 
         elif op in {"$in", "$nin"}:
-            assert isinstance(
-                arguments, dict
-            ), f"Expected a dict for {op} operator but got: {type(arguments)}"
-            assert (
-                len(arguments) == 1
-            ), f"Expected one key-value pair for {op} operator but got: {arguments}"
+            assert isinstance(arguments, dict), (
+                f"Expected a dict for {op} operator but got: {type(arguments)}"
+            )
+            assert len(arguments) == 1, (
+                f"Expected one key-value pair for {op} operator but got: {arguments}"
+            )
             metadata_key, target = arguments.popitem()
-            assert isinstance(target, list) or isinstance(
-                target, tuple
-            ), f"Expected a list or tuple for {op} operator but got: {type(target)}"
+            assert isinstance(target, list) or isinstance(target, tuple), (
+                f"Expected a list or tuple for {op} operator but got: {type(target)}"
+            )
             return f'<str>json_get(.metadata, "{metadata_key}") {FILTER_OPS[op]} array_unpack({target})'
 
         elif op in {"$eq", "$ne", "$lt", "$lte", "$gt", "$gte", "$like", "$ilike"}:
-            assert isinstance(
-                arguments, dict
-            ), f"Expected a dict for {op} operator but got: {type(arguments)}"
-            assert (
-                len(arguments) == 1
-            ), f"Expected one key-value pair for {op} operator but got: {arguments}"
+            assert isinstance(arguments, dict), (
+                f"Expected a dict for {op} operator but got: {type(arguments)}"
+            )
+            assert len(arguments) == 1, (
+                f"Expected one key-value pair for {op} operator but got: {arguments}"
+            )
             metadata_key, target = arguments.popitem()
             formatted_target = f'"{target}"' if isinstance(target, str) else str(target)
             return f'<str>json_get(.metadata, "{metadata_key}") {FILTER_OPS[op]} {formatted_target}'
@@ -159,7 +207,7 @@ class GelVectorStore(VectorStore):
         self,
         embeddings: Embeddings,
         collection_name: str = "default",
-        record_type: str = "ext::vectorstore::DefaultRecord",
+        record_type: str = "Record",
         use_async: bool = False,
     ):
         self._embeddings = embeddings
@@ -167,10 +215,27 @@ class GelVectorStore(VectorStore):
         self.record_type = record_type
         self.use_async = use_async
 
+        _client = gel.create_client()
+
+        try:
+            _client.ensure_connected()
+        except gel.errors.ClientConnectionError as e:
+            logger.error(NO_PROJECT_MESSAGE)
+            raise e
+
+        try:
+            _client.query(f"select {self.record_type};")
+        except gel.errors.InvalidReferenceError as e:
+            logger.error(
+                Template(MISSING_RECORD_TYPE_TEMPLATE).render(record_type="Record")
+            )
+            raise e
+
         if self.use_async:
-            self.client = edgedb.create_async_client()
+            _client.close()
+            self.client = gel.create_async_client()
         else:
-            self.client = edgedb.create_client()
+            self.client = _client
 
     @property
     def embeddings(self) -> Optional[Embeddings]:
@@ -238,7 +303,6 @@ class GelVectorStore(VectorStore):
         ids: Optional[list[str]] = None,
         **kwargs: Any,
     ) -> list[str]:
-
         texts_: Sequence[str] = (
             texts if isinstance(texts, (list, tuple)) else list(texts)
         )
