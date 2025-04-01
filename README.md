@@ -1,23 +1,19 @@
 # langchain-gel
 
-Gel integration package for the LangChain framework.
+This package enables LangChain to interact with Gel as a vectorstore.
+See LangChain's [documentation]() to learn more about how to take advantage of that.
 
+> Note: check out Gel's [AI extension] to learn how to automate embedding management away while taking advantage of poweful schema and EdgeQL query language.
 
-## Getting started 
+## Usage 
 
-### 1. Install Gel CLI
-
-```bash
-brew install gel
-```
-
-### 2. Create a Gel project
-
-For the cloud:
+1. Install Gel's Python binding and this package
 
 ```bash
-edgedb project init --server-instance <org-name>/<instance-name>
+pip install gel langchain-gel
 ```
+
+2. Initialize the project
 
 Locally:
 
@@ -25,25 +21,43 @@ Locally:
 gel project init
 ```
 
-and install the Vectorstore extension
+In the [cloud]():
 
 ```bash
-gel extension install vectorstore -I example
+gel project init --server-instance <org-name>/<instance-name>
+
 ```
 
-### 3. Enable the Vectorstore extension in the schema
+3. Add necessary components to the schema. Gel uses explicit schema and migrations, which gives you more control and preserves data integrity. `langchain-gel` expects the following schema: 
 
 ```gel
-using extension vectorstore
-```
+using extension pgvector;
+                                    
+module default {
+    scalar type EmbeddingVector extending ext::pgvector::vector<1536>;
 
-### 4. Install the Gel LangChain integration
+    type Record {
+        required collection: str;
+        text: str;
+        embedding: EmbeddingVector;
+        external_id: str {
+            constraint exclusive;
+        };
+        metadata: json;
+
+        index ext::pgvector::hnsw_cosine(m := 16, ef_construction := 128)
+            on (.embedding)
+    } 
+}
+```
+Copy-paste this to `dbschema/default.gel` and run a migration:
 
 ```bash
-pip3 install langchain-gel
+gel migration create \
+&& gel migrate
 ```
 
-### 5. Import and connect the `GelVectorstore`
+4. Use `GelVectorStore` as usual. It's a drop-in replacement for any other vectorstore in the LangChain ecosystem.
 
 ```python
 from langchain_gel import GelVectorStore
@@ -51,14 +65,6 @@ from langchain_gel import GelVectorStore
 vectorstore = GelVectorStore.from_texts()
 ```
 
-### 6. Run similarity search
+## Next steps
 
-```python
-vectorstore.query()
-```
-
-### 7. Connect to a RAG application
-
-```python
-# example RAG chain featuring the vectorstore
-```
+When you are ready to migrate to Gel's native vector handling, check out [Gel's documentation] to find instructions.
