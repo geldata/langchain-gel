@@ -1,7 +1,7 @@
 # langchain-gel
 
 This package enables LangChain to interact with Gel as a vectorstore.
-See LangChain's [documentation]() to learn more about how to take advantage of that.
+See LangChain's [documentation](https://python.langchain.com/docs/concepts/vectorstores/) to learn more about how to take advantage of that.
 
 > Note: check out Gel's [AI extension] to learn how to automate embedding management away while taking advantage of poweful schema and EdgeQL query language.
 
@@ -67,4 +67,4 @@ vectorstore = GelVectorStore.from_texts()
 
 ## Next steps
 
-When you are ready to migrate to Gel's native vector handling, check out [Gel's documentation] to find instructions.
+When you are ready to migrate to Gel's native vector handling, check out [Gel's documentation](docs.geldata.com) to find instructions.
