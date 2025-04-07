@@ -39,10 +39,12 @@ In order to use the LangChain integration, ensure you put the following in dbsch
     using extension pgvector;
                                         
     module default {
+        scalar type EmbeddingVector extending ext::pgvector::vector<1536>;
+
         type {{record_type}} {
             required collection: str;
             text: str;
-            embedding: ext::pgvector::vector<1536>;
+            embedding: EmbeddingVector; 
             external_id: str {
                 constraint exclusive;
             };
@@ -167,47 +169,71 @@ def filter_to_edgeql(filter: Union[dict, str, int, float]) -> str:
         f"Expected a dict of operands but got: {type(filter)}: {filter}"
     )
 
-    for op, arguments in filter.items():
-        if op in {"$and", "$or"}:
-            assert isinstance(arguments, list), (
-                f"Expected a list of dicts for {op} operator but got: {type(arguments)}"
-            )
+    # Handle $and and $or operators at the top level
+    if "$and" in filter:
+        assert isinstance(filter["$and"], list), (
+            f"Expected a list of dicts for $and operator but got: {type(filter['$and'])}"
+        )
+        filter_clause = " and ".join(filter_to_edgeql(item) for item in filter["$and"])
+        return f"({filter_clause})"
 
-            filter_clause = f" {FILTER_OPS[op]} ".join(
-                filter_to_edgeql(item) for item in arguments
-            )
-            return "(" + filter_clause + ")"
+    if "$or" in filter:
+        assert isinstance(filter["$or"], list), (
+            f"Expected a list of dicts for $or operator but got: {type(filter['$or'])}"
+        )
+        filter_clause = " or ".join(filter_to_edgeql(item) for item in filter["$or"])
+        return f"({filter_clause})"
 
-        elif op in {"$in", "$nin"}:
-            assert isinstance(arguments, dict), (
-                f"Expected a dict for {op} operator but got: {type(arguments)}"
-            )
-            assert len(arguments) == 1, (
-                f"Expected one key-value pair for {op} operator but got: {arguments}"
-            )
-            metadata_key, target = arguments.popitem()
-            assert isinstance(target, list) or isinstance(target, tuple), (
-                f"Expected a list or tuple for {op} operator but got: {type(target)}"
-            )
-            return f'<str>json_get(.metadata, "{metadata_key}") {FILTER_OPS[op]} array_unpack({target})'
+    # Handle field-level operators
+    field_filters = []
+    for field, value in filter.items():
+        if isinstance(value, dict):
+            # Handle operators like $in, $nin, $eq, etc.
+            for op, op_value in value.items():
+                if op in {"$in", "$nin"}:
+                    assert isinstance(op_value, (list, tuple)), (
+                        f"Expected a list or tuple for {op} operator but got: {type(op_value)}"
+                    )
+                    field_filters.append(
+                        f'<str>json_get(.metadata, "{field}") {FILTER_OPS[op]} array_unpack({op_value})'
+                    )
 
-        elif op in {"$eq", "$ne", "$lt", "$lte", "$gt", "$gte", "$like", "$ilike"}:
-            assert isinstance(arguments, dict), (
-                f"Expected a dict for {op} operator but got: {type(arguments)}"
-            )
-            assert len(arguments) == 1, (
-                f"Expected one key-value pair for {op} operator but got: {arguments}"
-            )
-            metadata_key, target = arguments.popitem()
-            formatted_target = f'"{target}"' if isinstance(target, str) else str(target)
-            return f'<str>json_get(.metadata, "{metadata_key}") {FILTER_OPS[op]} {formatted_target}'
+                elif op in {
+                    "$eq",
+                    "$ne",
+                    "$lt",
+                    "$lte",
+                    "$gt",
+                    "$gte",
+                    "$like",
+                    "$ilike",
+                }:
+                    formatted_value = (
+                        f'"{op_value}"' if isinstance(op_value, str) else str(op_value)
+                    )
+                    field_filters.append(
+                        f'<str>json_get(.metadata, "{field}") {FILTER_OPS[op]} {formatted_value}'
+                    )
 
-        elif op == "$between":
-            raise NotImplementedError(f"Operator {op} is not implemented")
+                elif op == "$between":
+                    raise NotImplementedError(f"Operator {op} is not implemented")
 
+                else:
+                    assert not op.startswith("$"), f"Unsupported operator: {op}"
         else:
-            assert not op.startswith("$"), f"Unsupported operator: {op}"
-            return f'<str>json_get(.metadata, "{op}"){filter_to_edgeql(arguments)}'
+            # Simple equality case
+            formatted_value = f'"{value}"' if isinstance(value, str) else str(value)
+            field_filters.append(
+                f'<str>json_get(.metadata, "{field}") = {formatted_value}'
+            )
+
+    if not field_filters:
+        raise ValueError(f"Invalid filter format: {filter}")
+
+    # If there are multiple field filters, combine them with "and"
+    if len(field_filters) > 1:
+        return f"({' and '.join(field_filters)})"
+    return field_filters[0]
 
 
 class GelVectorStore(VectorStore):
