@@ -1,2 +1,3 @@
-def main() -> None:
-    print("Hello from langchain-gel!")
+from langchain_gel.vectorstore import GelVectorStore
+
+__all__ = ["GelVectorStore"]
