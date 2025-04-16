@@ -247,22 +247,48 @@ class GelVectorStore(VectorStore):
         self.collection_name = collection_name
         self.record_type = record_type
 
-        self.sync_client = gel.create_client()
-        self.async_client = gel.create_async_client()
+        self._sync_client = None
+        self._async_client = None
 
-        try:
-            self.sync_client.ensure_connected()
-        except gel.errors.ClientConnectionError as e:
-            logger.error(NO_PROJECT_MESSAGE)
-            raise e
+    def get_sync_client(self):
+        if self._sync_client is None:
+            self._sync_client = gel.create_client()
 
-        try:
-            self.sync_client.query(f"select {self.record_type};")
-        except gel.errors.InvalidReferenceError as e:
-            logger.error(
-                Template(MISSING_RECORD_TYPE_TEMPLATE).render(record_type="Record")
-            )
-            raise e
+            try:
+                self._sync_client.ensure_connected()
+            except gel.errors.ClientConnectionError as e:
+                logger.error(NO_PROJECT_MESSAGE)
+                raise e
+
+            try:
+                self._sync_client.query(f"select {self.record_type};")
+            except gel.errors.InvalidReferenceError as e:
+                logger.error(
+                    Template(MISSING_RECORD_TYPE_TEMPLATE).render(record_type=self.record_type)
+                )
+                raise e
+
+        return self._sync_client
+
+    async def get_async_client(self):
+        if self._async_client is None:
+            self._async_client = gel.create_async_client()
+
+            try:
+                await self._async_client.ensure_connected()
+            except gel.errors.ClientConnectionError as e:
+                logger.error(NO_PROJECT_MESSAGE)
+                raise e
+
+            try:
+                await self._async_client.query(f"select {self.record_type};")
+            except gel.errors.InvalidReferenceError as e:
+                logger.error(
+                    Template(MISSING_RECORD_TYPE_TEMPLATE).render(record_type=self.record_type)
+                )
+                raise e
+
+        return self._async_client
 
     @property
     def embeddings(self) -> Optional[Embeddings]:
@@ -295,6 +321,8 @@ class GelVectorStore(VectorStore):
             ValueError: If the number of ids does not match the number of texts.
         """
 
+        client = self.get_sync_client()
+
         texts_: Sequence[str] = (
             texts if isinstance(texts, (list, tuple)) else list(texts)
         )
@@ -314,7 +342,7 @@ class GelVectorStore(VectorStore):
         inserted_ids = []
         for text, metadata_, id_ in zip(texts, metadatas_, ids_):
             embedding = self.embeddings.embed_query(text)
-            result = self.sync_client.query(
+            result = client.query(
                 INSERT_QUERY.render(record_type=self.record_type),
                 collection_name=self.collection_name,
                 external_id=id_,
@@ -334,6 +362,8 @@ class GelVectorStore(VectorStore):
         ids: Optional[list[str]] = None,
         **kwargs: Any,
     ) -> list[str]:
+        client = await self.get_async_client()
+
         texts_: Sequence[str] = (
             texts if isinstance(texts, (list, tuple)) else list(texts)
         )
@@ -353,7 +383,7 @@ class GelVectorStore(VectorStore):
         inserted_ids = []
         for text, metadata_, id_ in zip(texts, metadatas_, ids_):
             embedding = await self.embeddings.aembed_query(text)
-            result = await self.async_client.query(
+            result = await client.query(
                 INSERT_QUERY.render(record_type=self.record_type),
                 collection_name=self.collection_name,
                 external_id=id_,
@@ -376,14 +406,16 @@ class GelVectorStore(VectorStore):
             Optional[bool]: True if deletion is successful,
             False otherwise, None if not implemented.
         """
+        client = self.get_sync_client()
+
         if ids:
-            result = self.sync_client.query(
+            result = client.query(
                 DELETE_BY_IDS_QUERY.render(record_type=self.record_type),
                 collection_name=self.collection_name,
                 external_ids=ids,
             )
         else:
-            result = self.sync_client.query(
+            result = client.query(
                 DELETE_ALL_QUERY.render(record_type=self.record_type),
                 collection_name=self.collection_name,
             )
@@ -391,14 +423,16 @@ class GelVectorStore(VectorStore):
     async def adelete(
         self, ids: Optional[list[str]] = None, **kwargs: Any
     ) -> Optional[bool]:
+        client = await self.get_async_client()
+
         if ids:
-            result = await self.async_client.query(
+            result = await client.query(
                 DELETE_BY_IDS_QUERY.render(record_type=self.record_type),
                 collection_name=self.collection_name,
                 external_ids=ids,
             )
         else:
-            result = await self.async_client.query(
+            result = await client.query(
                 DELETE_ALL_QUERY.render(record_type=self.record_type),
                 collection_name=self.collection_name,
             )
@@ -427,7 +461,9 @@ class GelVectorStore(VectorStore):
 
         .. versionadded:: 0.2.11
         """
-        results = self.sync_client.query(
+        client = self.get_sync_client()
+
+        results = client.query(
             SELECT_BY_DOC_ID_QUERY.render(record_type=self.record_type),
             external_ids=ids,
         )
@@ -443,7 +479,9 @@ class GelVectorStore(VectorStore):
         return sorted(documents, key=lambda x: ids.index(x.id))
 
     async def aget_by_ids(self, ids: Sequence[str]) -> list[Document]:
-        results = await self.async_client.query(
+        client = await self.get_async_client()
+
+        results = await client.query(
             SELECT_BY_DOC_ID_QUERY.render(record_type=self.record_type),
             external_ids=ids,
         )
@@ -467,7 +505,9 @@ class GelVectorStore(VectorStore):
     ) -> Dict[str, Any]:
         filter_clause = "filter " + filter_to_edgeql(filter) if filter else ""
 
-        results = self.sync_client.query(
+        client = self.get_sync_client()
+
+        results = client.query(
             COSINE_SIMILARITY_QUERY.render(
                 record_type=self.record_type, filter_clause=filter_clause
             ),
@@ -486,7 +526,9 @@ class GelVectorStore(VectorStore):
     ) -> Dict[str, Any]:
         filter_clause = "filter " + filter_to_edgeql(filter) if filter else ""
 
-        results = await self.async_client.query(
+        client = await self.get_async_client()
+
+        results = await client.query(
             COSINE_SIMILARITY_QUERY.render(
                 record_type=self.record_type, filter_clause=filter_clause
             ),
