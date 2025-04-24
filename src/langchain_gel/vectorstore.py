@@ -251,6 +251,10 @@ class GelVectorStore(VectorStore):
         self._async_client = None
 
     def get_sync_client(self):
+        if self._async_client is not None:
+            raise RuntimeError("GelVectorStore has already been used in async mode. "
+                               "If you were intentionally trying to use different IO modes at the same time, "
+                               "please create a new instance instead.")
         if self._sync_client is None:
             self._sync_client = gel.create_client()
 
@@ -271,6 +275,10 @@ class GelVectorStore(VectorStore):
         return self._sync_client
 
     async def get_async_client(self):
+        if self._sync_client is not None:
+            raise RuntimeError("GelVectorStore has already been used in sync mode. "
+                               "If you were intentionally trying to use different IO modes at the same time, "
+                               "please create a new instance instead.")
         if self._async_client is None:
             self._async_client = gel.create_async_client()
 
