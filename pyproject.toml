@@ -1,6 +1,6 @@
 [project]
 name = "langchain-gel"
-version = "0.1.0"
+version = "1.0.0"
 description = "Gel integration package for the LangChain framework"
 readme = "README.md"
 authors = [
