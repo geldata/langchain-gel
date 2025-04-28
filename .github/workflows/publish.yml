@@ -51,8 +51,8 @@ jobs:
     # Dedicated environments with protections for publishing are strongly recommended.
     # For more information, see: https://docs.github.com/en/actions/deployment/targeting-different-environments/using-environments-for-deployment#deployment-protection-rules
     environment:
-      name: testpypi
-      url: https://test.pypi.org/p/langchain-gel
+      name: pypi
+      url: https://pypi.org/p/langchain-gel
 
     steps:
       - name: Retrieve release distributions
@@ -65,4 +65,3 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist/
-          repository-url: https://test.pypi.org/legacy/
