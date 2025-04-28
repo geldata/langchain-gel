@@ -21,7 +21,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [dependency-groups]
-test = [
+dev = [
     "anyio>=4.9.0",
     "langchain-tests>=0.3.17",
     "pytest>=8.3.4",

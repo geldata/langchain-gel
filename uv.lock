@@ -354,7 +354,7 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
-test = [
+dev = [
     { name = "anyio" },
     { name = "langchain-tests" },
     { name = "pytest" },
@@ -370,7 +370,7 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-test = [
+dev = [
     { name = "anyio", specifier = ">=4.9.0" },
     { name = "langchain-tests", specifier = ">=0.3.17" },
     { name = "pytest", specifier = ">=8.3.4" },
