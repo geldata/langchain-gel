@@ -348,16 +348,14 @@ name = "langchain-gel"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
-    { name = "anyio" },
     { name = "gel" },
     { name = "jinja2" },
     { name = "langchain-core" },
-    { name = "langchain-tests" },
-    { name = "pytest-asyncio" },
 ]
 
 [package.dev-dependencies]
 test = [
+    { name = "anyio" },
     { name = "langchain-tests" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
@@ -366,19 +364,17 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "anyio", specifier = ">=4.9.0" },
     { name = "gel", specifier = ">=3.0.1" },
     { name = "jinja2", specifier = ">=3.1.4" },
     { name = "langchain-core", specifier = ">=0.3.22" },
-    { name = "langchain-tests", specifier = ">=0.3.17" },
-    { name = "pytest-asyncio", specifier = ">=0.26.0" },
 ]
 
 [package.metadata.requires-dev]
 test = [
-    { name = "langchain-tests", specifier = ">=0.3.6" },
+    { name = "anyio", specifier = ">=4.9.0" },
+    { name = "langchain-tests", specifier = ">=0.3.17" },
     { name = "pytest", specifier = ">=8.3.4" },
-    { name = "pytest-asyncio", specifier = ">=0.24.0" },
+    { name = "pytest-asyncio", specifier = ">=0.26.0" },
     { name = "pytest-socket", specifier = ">=0.7.0" },
 ]
 
