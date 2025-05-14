@@ -693,7 +693,7 @@ class GelVectorStore(VectorStore):
             VectorStore: VectorStore initialized from texts and embeddings.
         """
         store = cls(embedding)
-        store.add_texts(texts, metadatas, ids)
+        store.add_texts(texts, metadatas, ids=ids)
         return store
 
     @classmethod
@@ -707,5 +707,5 @@ class GelVectorStore(VectorStore):
         **kwargs: Any,
     ) -> "GelVectorStore":
         store = cls(embedding, use_async=True)
-        await store.aadd_texts(texts, metadatas, ids)
+        await store.aadd_texts(texts, metadatas, ids=ids)
         return store
